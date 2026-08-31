@@ -1,0 +1,28 @@
+{
+  "name": "rest-manager",
+  "version": "1.0.0",
+  "description": "API para gerenciar tasks",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.15.0"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0",
+    "jest": "^30.5.0",
+    "supertest": "^7.2.2"
+  }
+}
