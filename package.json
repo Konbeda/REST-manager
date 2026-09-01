@@ -4,21 +4,25 @@
   "description": "API para gerenciar tasks",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Konbeda/REST-manager.git"
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/Konbeda/REST-manager/issues"
-  },
-  "homepage": "https://github.com/Konbeda/REST-manager#readme",
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.0"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0",
+    "jest": "^30.5.0",
+    "supertest": "^7.2.2"
   }
 }

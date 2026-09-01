@@ -1,47 +1,36 @@
-const Task = require('../models/Task');
+const taskService = require('../services/taskService');
 
-exports.getAllTasks = async (req, res) => {
-  const tasks = await Task.find();
-  res.json(tasks);
-};
+// Sem try/catch: no Express 5, a promise rejeitada de um handler async
+// é encaminhada automaticamente para o middleware de erro.
+async function create(req, res) {
+  const task = await taskService.createTask(req.body);
 
-exports.createTask = async (req, res) => {
-  try {
-    const { title, description } = req.body;
-    const newTask = new Task({ title, description });
-    const savedTask = await newTask.save();
-    res.status(201).json(savedTask);
-  } catch (err) {
-    res.status(400).json({ message: 'Erro ao criar tarefa', error: err.message });
-  }
-};
-
-exports.updateTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updatedTask = await Task.findByIdAndUpdate(id, req.body, { new: true });
-
-    if(!updatedTask) {
-      return res.status(404).json({ message: 'Tarefa não encontrada' });
-    }
-
-    res.json(updatedTask);
-  } catch (err) {
-    res.status(400).json({ message: 'Erro ao atualizar tarefa', error: err.message});
-  }
+  res.status(201).json(task);
 }
 
-exports.deleteTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedTask = await Task.findByIdAndDelete(id);
+async function list(req, res) {
+  const resultado = await taskService.listTasks(req.query);
 
-    if(!deletedTask) {
-      return res.status(404).json({ message: 'Tarefa não encontrada' });
-    }
-
-    res.json({ message: 'Tarefa deletada com sucesso'});
-  } catch (er) {
-    res.status(400).json({ message: 'Erro ao deletar tarefa: ', error: err.message});
-  }
+  res.json(resultado);
 }
+
+async function getById(req, res) {
+  const task = await taskService.getTaskById(req.params.id);
+
+  res.json(task);
+}
+
+async function update(req, res) {
+  const task = await taskService.updateTask(req.params.id, req.body);
+
+  res.json(task);
+}
+
+async function remove(req, res) {
+  await taskService.softDeleteTask(req.params.id);
+
+  // 204 não pode ter corpo: send() sem argumento, nunca json().
+  res.status(204).send();
+}
+
+module.exports = { create, list, getById, update, remove };
