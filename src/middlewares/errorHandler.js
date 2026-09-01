@@ -5,6 +5,11 @@ const { AppError } = require('../utils/AppError');
 function errorHandler(err, req, res, next) {
   // Erro que o nosso código levantou de propósito, já com status.
   if (err instanceof AppError) {
+    // Cabeçalho padrão do HTTP: diz ao cliente quando vale a pena tentar de novo.
+    if (err.retryAfter !== undefined) {
+      res.set('Retry-After', String(err.retryAfter));
+    }
+
     return res.status(err.statusCode).json({ error: err.message });
   }
 
