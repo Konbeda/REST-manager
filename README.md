@@ -72,12 +72,16 @@ requisições e quebra em toda consulta.
 npm test
 ```
 
-Requer Docker rodando. Cada arquivo de teste sobe seu próprio contêiner
-MongoDB numa porta aleatória e o destrói no fim, então a suíte **nunca**
-toca no banco de desenvolvimento.
+Requer Docker rodando. Um único contêiner MongoDB sobe antes da suíte
+(`globalSetup`) numa porta aleatória e é destruído no fim, então os testes
+**nunca** tocam no banco de desenvolvimento.
+
+O isolamento entre os workers paralelos é feito por **banco**, não por
+contêiner: cada worker usa `test_worker_<JEST_WORKER_ID>` dentro da mesma
+instância.
 
 A primeira execução baixa a imagem `mongo:7` (~300 MB) e pode levar alguns
-minutos. As seguintes levam cerca de 20 segundos.
+minutos. As seguintes levam cerca de 13 segundos.
 
 ```bash
 npm run test:watch          # reroda ao salvar
@@ -140,10 +144,47 @@ GET /api/tasks?status=pending&sort=-dueDate&page=2&limit=10
 }
 ```
 
-### `GET /health`
+### Sondas — públicas
 
-Público. Responde `{ "status": "ok", "uptime": 123.45 }` sem consultar o
-banco — serve para distinguir "servidor fora do ar" de "banco fora do ar".
+São perguntas diferentes, e por isso são dois endpoints.
+
+| Rota | Pergunta | Quem usa |
+|---|---|---|
+| `GET /health` | *liveness* — o processo está vivo? | orquestrador, para decidir **reiniciar** |
+| `GET /ready` | *readiness* — consigo atender agora? | balanceador, para decidir **encaminhar** |
+
+`/health` responde `{ "status": "ok", "uptime": 123.45 }` **sem consultar o
+banco**, de propósito: uma instância que perdeu a conexão com o Mongo está
+viva, e reiniciá-la não resolveria nada.
+
+`/ready` responde `200 { "status": "ready" }` quando o banco está conectado
+e a aplicação não está encerrando. Caso contrário, `503` — o que faz o
+balanceador tirar a instância do pool sem que ninguém a reinicie.
+
+## Encerramento gracioso
+
+Ao receber `SIGTERM` ou `SIGINT`, a aplicação encerra em etapas:
+
+1. `/ready` passa a responder `503`, **mas continua atendendo**
+2. espera alguns segundos para o balanceador sondar e removê-la do pool —
+   fechar antes disso faria o tráfego continuar chegando numa porta morta
+3. `server.close()` recusa conexões novas e aguarda as em andamento;
+   `closeIdleConnections()` roda em laço para não esperar o `keepAliveTimeout`
+   de conexões keep-alive que ficam ociosas nesse meio-tempo
+4. no prazo limite, `closeAllConnections()` derruba o que sobrou — melhor
+   sacrificar algumas requisições do que estourar o prazo do supervisor
+5. só então fecha o MongoDB, e sai com código `0`
+
+| Variável | Padrão | O que é |
+|---|---|---|
+| `SHUTDOWN_ESPERA_LB_MS` | `3000` | espera até o balanceador notar o `503` |
+| `SHUTDOWN_PRAZO_MS` | `10000` | prazo máximo de drenagem |
+
+**A soma desses dois precisa caber no prazo do supervisor.** O `docker stop`
+mata com `SIGKILL` depois do seu timeout (medido em 3 s na versão testada,
+configurável com `--time`); no Kubernetes é o `terminationGracePeriodSeconds`,
+30 s por padrão. Estourar significa `SIGKILL` no meio da drenagem — e código
+de saída `137` no log.
 
 ## Campos
 
@@ -202,6 +243,7 @@ src/
   models/                   schemas do Mongoose
   middlewares/              autenticação, rate limit e tratamento de erro
   utils/AppError.js         erro com status HTTP embutido
+  utils/desligamento.js     encerramento gracioso em etapas
 tests/                      suíte Jest
 requests.http               requisições de exemplo (extensão REST Client)
 ```
@@ -286,16 +328,14 @@ coisa; a aplicação aplica regras que só ela conhece, como "falhas por conta".
   lista de revogação — que reintroduz estado no servidor.
 - **CORS liberado para qualquer origem**, adequado a desenvolvimento e a ser
   restringido antes de produção.
-- **Aviso intermitente de *worker teardown* do Jest** na suíte completa.
-  Investigado sem reprodução: não voltou em 11 execuções dirigidas, incluindo
-  variação de `maxWorkers` (1, 2, 4, 8 e o padrão) e carga artificial de CPU.
-  `--detectOpenHandles` não reporta nada — mas ele força execução serial
-  (~82 s contra ~25 s), então não consegue exercitar um sintoma que só
-  aparece em paralelo. Cada arquivo roda limpo isoladamente, nenhum contêiner
-  fica órfão e todos os testes passam sempre. A hipótese é uma corrida no
-  encerramento simultâneo de vários contêineres; a correção estrutural seria
-  compartilhar um contêiner via `globalSetup`. **Não** usar `--forceExit`:
-  ele esconderia também um vazamento real no futuro.
+- **Aviso intermitente de *worker teardown* do Jest**, que ocorria quando
+  cada arquivo subia o próprio contêiner. Não voltou depois da migração para
+  `globalSetup` — evidência a favor da hipótese de corrida no encerramento
+  simultâneo, mas não prova, já que o aviso nunca foi reproduzível sob
+  demanda. **Não** usar `--forceExit` se ele voltar: esconderia também um
+  vazamento real. O caminho é isolar por combinação de arquivos, que foi
+  como um vazamento de verdade (timer de rota não cancelado) acabou sendo
+  encontrado nos testes de encerramento.
 
 ## Licença
 
