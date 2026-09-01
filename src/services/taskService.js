@@ -74,11 +74,12 @@ function garantirIdValido(id) {
   }
 }
 
-async function createTask(dados) {
-  return Task.create(filtrarCampos(dados));
+async function createTask(dados, ownerId) {
+  // owner vem do token, nunca do corpo: filtrarCampos nao o inclui.
+  return Task.create({ ...filtrarCampos(dados), owner: ownerId });
 }
 
-async function updateTask(id, dados) {
+async function updateTask(id, dados, ownerId) {
   garantirIdValido(id);
 
   const campos = filtrarCampos(dados);
@@ -91,7 +92,7 @@ async function updateTask(id, dados) {
   }
 
   // findOneAndUpdate (e não findByIdAndUpdate) para poder exigir deletedAt: null.
-  const task = await Task.findOneAndUpdate({ _id: id, ...NAO_DELETADAS }, campos, {
+  const task = await Task.findOneAndUpdate({ _id: id, owner: ownerId, ...NAO_DELETADAS }, campos, {
     new: true, // devolve o documento DEPOIS da alteração
     runValidators: true, // sem isto, o schema é ignorado no update
   });
@@ -105,16 +106,16 @@ async function updateTask(id, dados) {
 
 // Idempotente por decisão de projeto: apagar o que já não existe é sucesso.
 // Nunca lança 404 — isso evitaria confirmar quais ids existem.
-async function softDeleteTask(id) {
+async function softDeleteTask(id, ownerId) {
   garantirIdValido(id);
 
-  await Task.updateOne({ _id: id, ...NAO_DELETADAS }, { deletedAt: new Date() });
+  await Task.updateOne({ _id: id, owner: ownerId, ...NAO_DELETADAS }, { deletedAt: new Date() });
 }
 
-async function getTaskById(id) {
+async function getTaskById(id, ownerId) {
   garantirIdValido(id);
 
-  const task = await Task.findOne({ _id: id, ...NAO_DELETADAS });
+  const task = await Task.findOne({ _id: id, owner: ownerId, ...NAO_DELETADAS });
 
   if (!task) {
     throw new AppError('Task não encontrada', 404);
@@ -123,12 +124,12 @@ async function getTaskById(id) {
   return task;
 }
 
-async function listTasks(query = {}) {
+async function listTasks(query = {}, ownerId) {
   const page = parseInteiroPositivo(query.page, 1, 'page');
   const limitPedido = parseInteiroPositivo(query.limit, LIMIT_PADRAO, 'limit');
   const limit = Math.min(limitPedido, LIMIT_MAXIMO);
 
-  const filtro = montarFiltro(query);
+  const filtro = { ...montarFiltro(query), owner: ownerId };
   const ordenacao = montarOrdenacao(query.sort);
 
   // As duas consultas são independentes: em paralelo paga-se uma latência, não duas.

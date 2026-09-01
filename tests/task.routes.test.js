@@ -4,8 +4,19 @@ const { MongoDBContainer } = require('@testcontainers/mongodb');
 
 const app = require('../src/app');
 const { Task } = require('../src/models/Task');
+const { novoUsuario } = require('./helpers');
 
 let container;
+let auth;
+let userId;
+
+// Declarado antes dos outros beforeEach: roda primeiro, então o seed
+// já encontra userId preenchido.
+beforeEach(async () => {
+  const usuario = await novoUsuario();
+  auth = usuario.auth;
+  userId = usuario.id;
+});
 
 beforeAll(async () => {
   container = await new MongoDBContainer('mongo:7').start();
@@ -24,7 +35,7 @@ afterAll(async () => {
 describe('POST /api/tasks', () => {
   it('cria uma task e responde 201', async () => {
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/tasks').set('Authorization', auth)
       .send({ title: 'Escrever o primeiro endpoint' });
 
     expect(res.status).toBe(201);
@@ -34,13 +45,13 @@ describe('POST /api/tasks', () => {
   });
 
   it('grava de verdade no banco', async () => {
-    await request(app).post('/api/tasks').send({ title: 'Confirmar persistência' });
+    await request(app).post('/api/tasks').set('Authorization', auth).send({ title: 'Confirmar persistência' });
 
     expect(await Task.countDocuments()).toBe(1);
   });
 
   it('responde 400 quando falta o título', async () => {
-    const res = await request(app).post('/api/tasks').send({});
+    const res = await request(app).post('/api/tasks').set('Authorization', auth).send({});
 
     expect(res.status).toBe(400);
     expect(res.body.campos.title).toBe('O título é obrigatório');
@@ -48,7 +59,7 @@ describe('POST /api/tasks', () => {
 
   it('responde 400 para status fora do enum', async () => {
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/tasks').set('Authorization', auth)
       .send({ title: 'Task válida', status: 'pendente' });
 
     expect(res.status).toBe(400);
@@ -57,7 +68,7 @@ describe('POST /api/tasks', () => {
 
   it('ignora campos que o cliente não deveria definir', async () => {
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/tasks').set('Authorization', auth)
       .send({ title: 'Tentativa de mass assignment', _id: 'forjado', admin: true });
 
     expect(res.status).toBe(201);

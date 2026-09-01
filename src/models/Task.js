@@ -26,6 +26,13 @@ const taskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Dono da task. Vem SEMPRE do token, nunca do corpo da requisição.
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'A task precisa de um dono'],
+      index: true,
+    },
     // Soft delete: null = viva. Nunca definido pelo cliente.
     deletedAt: {
       type: Date,
@@ -34,6 +41,9 @@ const taskSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// Toda consulta filtra por dono e por não-apagada: o índice acompanha.
+taskSchema.index({ owner: 1, deletedAt: 1 });
 
 // Lixeira automática: o Mongo apaga sozinho o que está na lixeira há 30 dias.
 // Documentos com deletedAt null são ignorados pelo TTL (não são data).

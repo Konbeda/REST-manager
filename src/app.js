@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 
 const taskRoutes = require('./routes/taskRoutes');
+const authRoutes = require('./routes/authRoutes');
 const { errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
@@ -18,6 +19,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // Sempre por ÚLTIMO: só recebe o que os middlewares anteriores jogaram.
