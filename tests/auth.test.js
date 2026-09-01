@@ -1,19 +1,17 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
-const { MongoDBContainer } = require('@testcontainers/mongodb');
 
 // O teste controla o próprio ambiente: não depende do .env da máquina.
 process.env.JWT_SECRET = 'segredo-de-teste-nao-usar-em-producao';
 
 const app = require('../src/app');
 const { User } = require('../src/models/User');
+const { conectarMongo } = require('./helpers');
 
-let container;
 
 beforeAll(async () => {
-  container = await new MongoDBContainer('mongo:7').start();
-  await mongoose.connect(container.getConnectionString(), { directConnection: true });
+  await conectarMongo();
 
   // Cria os índices declarados no schema — sem isto o unique não existe.
   await User.init();
@@ -25,7 +23,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await container.stop();
 });
 
 const USUARIO = {
