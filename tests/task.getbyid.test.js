@@ -21,11 +21,11 @@ afterAll(async () => {
   await container.stop();
 });
 
-describe('GET /tasks/:id', () => {
+describe('GET /api/tasks/:id', () => {
   it('devolve a task quando o id existe', async () => {
     const criada = await Task.create({ title: 'Buscar por id' });
 
-    const res = await request(app).get(`/tasks/${criada._id}`);
+    const res = await request(app).get(`/api/tasks/${criada._id}`);
 
     expect(res.status).toBe(200);
     expect(res.body.title).toBe('Buscar por id');
@@ -35,14 +35,14 @@ describe('GET /tasks/:id', () => {
   it('devolve 404 para id válido que não existe', async () => {
     const idInexistente = new mongoose.Types.ObjectId();
 
-    const res = await request(app).get(`/tasks/${idInexistente}`);
+    const res = await request(app).get(`/api/tasks/${idInexistente}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Task não encontrada');
   });
 
   it('devolve 400 para id malformado', async () => {
-    const res = await request(app).get('/tasks/banana');
+    const res = await request(app).get('/api/tasks/banana');
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/não é um id válido/);
@@ -51,7 +51,7 @@ describe('GET /tasks/:id', () => {
   // Drivers antigos aceitavam qualquer string de 12 caracteres como ObjectId.
   // O bson 6 não aceita mais — o teste fica como guarda contra regressão.
   it('devolve 400 para string de 12 caracteres', async () => {
-    const res = await request(app).get('/tasks/banana123456');
+    const res = await request(app).get('/api/tasks/banana123456');
 
     expect(res.status).toBe(400);
   });
@@ -59,7 +59,7 @@ describe('GET /tasks/:id', () => {
   it('aceita id em maiúsculas', async () => {
     const criada = await Task.create({ title: 'Hex maiúsculo' });
 
-    const res = await request(app).get(`/tasks/${criada._id.toString().toUpperCase()}`);
+    const res = await request(app).get(`/api/tasks/${criada._id.toString().toUpperCase()}`);
 
     expect(res.status).toBe(200);
   });

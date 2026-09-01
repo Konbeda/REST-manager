@@ -18,7 +18,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-app.use('/tasks', taskRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Sempre por ÚLTIMO: só recebe o que os middlewares anteriores jogaram.
 app.use(errorHandler);

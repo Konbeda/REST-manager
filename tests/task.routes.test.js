@@ -21,10 +21,10 @@ afterAll(async () => {
   await container.stop();
 });
 
-describe('POST /tasks', () => {
+describe('POST /api/tasks', () => {
   it('cria uma task e responde 201', async () => {
     const res = await request(app)
-      .post('/tasks')
+      .post('/api/tasks')
       .send({ title: 'Escrever o primeiro endpoint' });
 
     expect(res.status).toBe(201);
@@ -34,13 +34,13 @@ describe('POST /tasks', () => {
   });
 
   it('grava de verdade no banco', async () => {
-    await request(app).post('/tasks').send({ title: 'Confirmar persistência' });
+    await request(app).post('/api/tasks').send({ title: 'Confirmar persistência' });
 
     expect(await Task.countDocuments()).toBe(1);
   });
 
   it('responde 400 quando falta o título', async () => {
-    const res = await request(app).post('/tasks').send({});
+    const res = await request(app).post('/api/tasks').send({});
 
     expect(res.status).toBe(400);
     expect(res.body.campos.title).toBe('O título é obrigatório');
@@ -48,7 +48,7 @@ describe('POST /tasks', () => {
 
   it('responde 400 para status fora do enum', async () => {
     const res = await request(app)
-      .post('/tasks')
+      .post('/api/tasks')
       .send({ title: 'Task válida', status: 'pendente' });
 
     expect(res.status).toBe(400);
@@ -57,7 +57,7 @@ describe('POST /tasks', () => {
 
   it('ignora campos que o cliente não deveria definir', async () => {
     const res = await request(app)
-      .post('/tasks')
+      .post('/api/tasks')
       .send({ title: 'Tentativa de mass assignment', _id: 'forjado', admin: true });
 
     expect(res.status).toBe(201);
