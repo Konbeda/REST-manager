@@ -1,0 +1,76 @@
+# Requisições de exemplo para a extensão REST Client do VS Code.
+# Instale "REST Client" (humao.rest-client) e clique em "Send Request"
+# acima de cada bloco.
+#
+# O token é capturado da resposta do login e reaproveitado: você não
+# precisa copiar e colar nada.
+
+@baseUrl = http://localhost:3000
+@email = victor@exemplo.com
+@senha = senha-secreta
+
+### registrar (só precisa uma vez)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Victor",
+  "email": "{{email}}",
+  "password": "{{senha}}"
+}
+
+### login — o @name abaixo é o que permite referenciar a resposta
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{senha}}"
+}
+
+### daqui pra baixo, o token vem da resposta do login acima
+@token = {{login.response.body.token}}
+
+### criar task
+# @name criar
+POST {{baseUrl}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "title": "Minha primeira task pela API",
+  "description": "Criada pelo REST Client",
+  "status": "pending"
+}
+
+### listar
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### listar com filtro, ordenação e paginação
+GET {{baseUrl}}/api/tasks?status=pending&sort=-createdAt&page=1&limit=10
+Authorization: Bearer {{token}}
+
+### buscar por id (usa o id da task criada acima)
+GET {{baseUrl}}/api/tasks/{{criar.response.body._id}}
+Authorization: Bearer {{token}}
+
+### atualizar parcialmente
+PATCH {{baseUrl}}/api/tasks/{{criar.response.body._id}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "done"
+}
+
+### apagar (soft delete — 204, sem corpo)
+DELETE {{baseUrl}}/api/tasks/{{criar.response.body._id}}
+Authorization: Bearer {{token}}
+
+### sem token — deve dar 401
+GET {{baseUrl}}/api/tasks
+
+### saúde do servidor (não exige token)
+GET {{baseUrl}}/health
