@@ -5,17 +5,15 @@ process.env.RATE_LIMIT_AUTH_MAX = '1000000'; // o limite por IP não interfere a
 
 const request = require('supertest');
 const mongoose = require('mongoose');
-const { MongoDBContainer } = require('@testcontainers/mongodb');
 
 const app = require('../src/app');
 const { User } = require('../src/models/User');
 const { LoginAttempt } = require('../src/models/LoginAttempt');
+const { conectarMongo } = require('./helpers');
 
-let container;
 
 beforeAll(async () => {
-  container = await new MongoDBContainer('mongo:7').start();
-  await mongoose.connect(container.getConnectionString(), { directConnection: true });
+  await conectarMongo();
   await LoginAttempt.init();
 });
 
@@ -26,7 +24,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await container.stop();
 });
 
 const USUARIO = { name: 'Victor', email: 'victor@exemplo.com', password: 'senha-secreta' };

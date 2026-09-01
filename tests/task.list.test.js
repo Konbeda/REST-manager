@@ -1,12 +1,10 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
-const { MongoDBContainer } = require('@testcontainers/mongodb');
 
 const app = require('../src/app');
 const { Task } = require('../src/models/Task');
-const { novoUsuario } = require('./helpers');
+const { novoUsuario, conectarMongo } = require('./helpers');
 
-let container;
 let auth;
 let userId;
 
@@ -19,8 +17,7 @@ beforeEach(async () => {
 });
 
 beforeAll(async () => {
-  container = await new MongoDBContainer('mongo:7').start();
-  await mongoose.connect(container.getConnectionString(), { directConnection: true });
+  await conectarMongo();
 });
 
 // Datas explícitas: não dá pra confiar em createdAt quando os documentos
@@ -39,7 +36,6 @@ afterEach(async () => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await container.stop();
 });
 
 const titulos = (res) => res.body.data.map((t) => t.title);

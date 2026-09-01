@@ -1,20 +1,16 @@
 const mongoose = require('mongoose');
-const { MongoDBContainer } = require('@testcontainers/mongodb');
 const { Task } = require('../src/models/Task');
+const { conectarMongo } = require('./helpers');
 
 // owner é obrigatório; aqui só interessa validar persistência, não posse.
 const OWNER = new mongoose.Types.ObjectId();
 
-let container;
 
 // beforeAll roda UMA vez, antes de todos os testes deste arquivo.
+// O contêiner é único para toda a suíte (ver tests/globalSetup.js); aqui só
+// abrimos a conexão com o banco reservado a este worker.
 beforeAll(async () => {
-  // Versão fixada: teste tem que rodar igual hoje e daqui a um ano.
-  container = await new MongoDBContainer('mongo:7').start();
-
-  // O container sobe um replica set de 1 nó; directConnection evita
-  // que o driver tente descobrir os outros nós (que não existem).
-  await mongoose.connect(container.getConnectionString(), { directConnection: true });
+  await conectarMongo();
 });
 
 // Depois de CADA teste: banco limpo. É o que torna os testes independentes.
@@ -22,10 +18,10 @@ afterEach(async () => {
   await Task.deleteMany({});
 });
 
-// No fim do arquivo: fecha a conexão e destrói o contêiner.
+// No fim do arquivo: fecha a conexão. O contêiner é derrubado pelo
+// globalTeardown, depois que TODOS os arquivos terminarem.
 afterAll(async () => {
   await mongoose.disconnect();
-  await container.stop();
 });
 
 describe('Task (integração com Mongo real)', () => {
