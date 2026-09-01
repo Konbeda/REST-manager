@@ -40,6 +40,7 @@ cp .env.example .env
 | `PORT` | Porta do servidor. Padrão: `3000` |
 | `MONGODB_URI` | String de conexão. No Atlas: **Connect → Drivers**. Inclua o nome do banco antes do `?` |
 | `JWT_SECRET` | Chave de assinatura dos tokens. **Nunca comite o valor real** |
+| `TRUST_PROXY` | Quantos proxies confiáveis existem à frente. Padrão `0`. Ver [Rate limiting](#rate-limiting) |
 
 Gere o `JWT_SECRET` com:
 
@@ -185,6 +186,7 @@ Erro de validação, com os campos que falharam:
 | `401` | Token ausente, inválido ou expirado; credencial errada no login |
 | `404` | Recurso inexistente **ou pertencente a outro usuário** |
 | `409` | E-mail já cadastrado |
+| `429` | Rate limit excedido — por IP ou por conta. Traz `Retry-After` |
 | `500` | Erro não previsto |
 
 ## Estrutura
@@ -198,7 +200,7 @@ src/
   controllers/              falam HTTP: leem req, escolhem status
   services/                 regra de negócio — não conhecem req/res
   models/                   schemas do Mongoose
-  middlewares/              autenticação e tratamento de erro
+  middlewares/              autenticação, rate limit e tratamento de erro
   utils/AppError.js         erro com status HTTP embutido
 tests/                      suíte Jest
 requests.http               requisições de exemplo (extensão REST Client)
@@ -207,6 +209,44 @@ requests.http               requisições de exemplo (extensão REST Client)
 `app.js` é separado de `index.js` de propósito: o app não abre porta, o que
 permite testá-lo com Supertest sem subir servidor nem disputar a porta entre
 os workers paralelos do Jest.
+
+## Rate limiting
+
+As rotas de autenticação têm duas proteções, com propósitos diferentes.
+
+**Por IP**, em `/api/auth/*` — 30 requisições por 15 minutos, em memória.
+Resposta `429` com `Retry-After` e os cabeçalhos `RateLimit-*` padronizados.
+
+**Por conta**, no login — 5 falhas por 15 minutos para o mesmo e-mail,
+com contador no MongoDB. Existe porque um ataque distribuído por centenas
+de máquinas escapa do limite por IP, mas não deste. A janela é contada a
+partir da **primeira** falha e não é renovada pelas seguintes: renová-la
+permitiria a um atacante manter a conta trancada indefinidamente. Um login
+bem-sucedido zera o contador, e um índice TTL apaga os registros expirados.
+
+Falhas são contabilizadas também para e-mails inexistentes — se só contassem
+para contas reais, a diferença de comportamento revelaria quais existem.
+
+### `TRUST_PROXY`
+
+Diz ao Express quantos proxies confiáveis existem à frente da aplicação,
+para que ele saiba qual entrada do `X-Forwarded-For` é o IP real do cliente.
+
+| Valor | Quando |
+|---|---|
+| `0` (padrão) | sem proxy: o cabeçalho é ignorado e `req.ip` é a conexão direta |
+| `1` | um proxy reverso (nginx, ALB) |
+| `2` | dois — por exemplo Cloudflare na frente de um ALB |
+
+**O padrão é `0` de propósito.** Confiar no `X-Forwarded-For` sem um proxy
+real à frente permitiria a qualquer cliente forjar o próprio IP e tornar o
+rate limit inútil — há teste cobrindo esse caso. Se a aplicação for publicada
+atrás de um proxy e essa variável não for ajustada, o limite passará a contar
+o IP do proxy, errando para o lado restritivo.
+
+O limite da aplicação é **complementar** ao da borda (Cloudflare, WAF, nginx),
+não substituto: a infraestrutura barra volume bruto antes de custar qualquer
+coisa; a aplicação aplica regras que só ela conhece, como "falhas por conta".
 
 ## Decisões de projeto
 
@@ -224,23 +264,38 @@ os workers paralelos do Jest.
   prévia — o que elimina a janela de corrida entre verificar e gravar.
 - **`PATCH` usa `runValidators`**, sem o qual o Mongoose ignora as
   validações do schema em atualizações.
+- **Rate limit em duas camadas**, por IP e por conta: um ataque distribuído
+  escapa do primeiro, mas não do segundo. E `TRUST_PROXY` tem padrão seguro
+  (`0`), porque confiar no `X-Forwarded-For` sem proxy real tornaria o limite
+  contornável com um cabeçalho forjado.
 
 ## Limitações conhecidas
 
 - **Enumeração de usuários por tempo de resposta no login**: o caminho
   "e-mail não existe" não paga o custo do `bcrypt.compare`. A correção seria
   uma comparação descartável para igualar o tempo.
-- **Sem rate limiting**: nada impede tentativas repetidas de login.
+- **O rate limit por IP conta em memória**, por processo. Com uma instância
+  funciona; com várias atrás de um balanceador, cada uma tem o próprio
+  contador e o limite efetivo multiplica pelo número de instâncias. A correção
+  é um store compartilhado (Redis) — a troca é do *store* do
+  `express-rate-limit`, sem mexer no resto do código. O limite por conta não
+  tem esse problema, por já viver no MongoDB.
 - **Tokens não podem ser revogados.** Como o servidor não guarda estado,
   logout é do lado do cliente e trocar a senha não invalida tokens já
   emitidos. Mitigações usuais: expiração curta com refresh token, ou uma
   lista de revogação — que reintroduz estado no servidor.
 - **CORS liberado para qualquer origem**, adequado a desenvolvimento e a ser
   restringido antes de produção.
-- Ao rodar a suíte completa, o Jest emite um aviso de *worker teardown* pela
-  disputa entre os contêineres no encerramento. Todos os testes passam, e
-  cada arquivo roda limpo isoladamente. A solução seria compartilhar um
-  contêiner via `globalSetup`.
+- **Aviso intermitente de *worker teardown* do Jest** na suíte completa.
+  Investigado sem reprodução: não voltou em 11 execuções dirigidas, incluindo
+  variação de `maxWorkers` (1, 2, 4, 8 e o padrão) e carga artificial de CPU.
+  `--detectOpenHandles` não reporta nada — mas ele força execução serial
+  (~82 s contra ~25 s), então não consegue exercitar um sintoma que só
+  aparece em paralelo. Cada arquivo roda limpo isoladamente, nenhum contêiner
+  fica órfão e todos os testes passam sempre. A hipótese é uma corrida no
+  encerramento simultâneo de vários contêineres; a correção estrutural seria
+  compartilhar um contêiner via `globalSetup`. **Não** usar `--forceExit`:
+  ele esconderia também um vazamento real no futuro.
 
 ## Licença
 

@@ -4,8 +4,15 @@ const cors = require('cors');
 const taskRoutes = require('./routes/taskRoutes');
 const authRoutes = require('./routes/authRoutes');
 const { errorHandler } = require('./middlewares/errorHandler');
+const { authRateLimit } = require('./middlewares/rateLimit');
 
 const app = express();
+
+// Quantos proxies confiáveis existem à frente da aplicação.
+// 0 (padrão) = nenhum: req.ip é a conexão direta e o X-Forwarded-For é
+// ignorado. Confiar nesse cabeçalho sem proxy real na frente permitiria a
+// qualquer cliente forjar o próprio IP e escapar do rate limit.
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 0));
 
 // Libera requisições vindas de outras origens (ex.: um front rodando em outra porta).
 app.use(cors());
@@ -19,7 +26,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRateLimit, authRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // Sempre por ÚLTIMO: só recebe o que os middlewares anteriores jogaram.
